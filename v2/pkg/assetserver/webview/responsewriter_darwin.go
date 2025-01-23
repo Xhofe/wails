@@ -69,6 +69,7 @@ import "C"
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"unsafe"
 )
@@ -98,16 +99,31 @@ func (rw *responseWriter) Write(buf []byte) (int, error) {
 
 	rw.WriteHeader(http.StatusOK)
 
-	var content unsafe.Pointer
 	var contentLen int
 	if buf != nil {
-		content = unsafe.Pointer(&buf[0])
 		contentLen = len(buf)
 	}
 
-	if !C.URLSchemeTaskDidReceiveData(rw.r.task, content, C.int(contentLen)) {
-		return 0, errRequestStopped
+	if contentLen > 0 {
+		// Create a C array to hold the data
+		cBuf := C.malloc(C.size_t(contentLen))
+		if cBuf == nil {
+			return 0, fmt.Errorf("memory allocation failed for %d bytes", contentLen)
+		}
+		defer C.free(cBuf)
+
+		// Copy the Go slice to the C array
+		C.memcpy(cBuf, unsafe.Pointer(&buf[0]), C.size_t(contentLen))
+
+		if !C.URLSchemeTaskDidReceiveData(rw.r.task, cBuf, C.int(contentLen)) {
+			return 0, errRequestStopped
+		}
+	} else {
+		if !C.URLSchemeTaskDidReceiveData(rw.r.task, nil, 0) {
+			return 0, errRequestStopped
+		}
 	}
+
 	return contentLen, nil
 }
 
@@ -133,15 +149,16 @@ func (rw *responseWriter) WriteHeader(code int) {
 	C.URLSchemeTaskDidReceiveResponse(rw.r.task, C.int(code), headers, C.int(headersLen))
 }
 
-func (rw *responseWriter) Finish() {
+func (rw *responseWriter) Finish() error {
 	if !rw.wroteHeader {
 		rw.WriteHeader(http.StatusNotImplemented)
 	}
 
 	if rw.finished {
-		return
+		return nil
 	}
 	rw.finished = true
 
 	C.URLSchemeTaskDidFinish(rw.r.task)
+	return nil
 }

@@ -24,6 +24,7 @@ var (
 	procShowWindowAsync               = moduser32.NewProc("ShowWindowAsync")
 	procUpdateWindow                  = moduser32.NewProc("UpdateWindow")
 	procCreateWindowEx                = moduser32.NewProc("CreateWindowExW")
+	procFindWindowW                   = moduser32.NewProc("FindWindowW")
 	procAdjustWindowRect              = moduser32.NewProc("AdjustWindowRect")
 	procAdjustWindowRectEx            = moduser32.NewProc("AdjustWindowRectEx")
 	procDestroyWindow                 = moduser32.NewProc("DestroyWindow")
@@ -259,6 +260,14 @@ func CreateWindowEx(exStyle uint, className, windowName *uint16,
 		uintptr(menu),
 		uintptr(instance),
 		uintptr(param))
+
+	return HWND(ret)
+}
+
+func FindWindowW(className, windowName *uint16) HWND {
+	ret, _, _ := procFindWindowW.Call(
+		uintptr(unsafe.Pointer(className)),
+		uintptr(unsafe.Pointer(windowName)))
 
 	return HWND(ret)
 }
@@ -630,7 +639,7 @@ func GetSysColorBrush(nIndex int) HBRUSH {
 
 		return HBRUSH(ret)
 	*/
-	ret, _, _ := syscall.Syscall(getSysColorBrush, 1,
+	ret, _, _ := syscall.SyscallN(getSysColorBrush,
 		uintptr(nIndex),
 		0,
 		0)
@@ -783,11 +792,9 @@ func CreateMenu() HMENU {
 }
 
 func SetMenu(hWnd HWND, hMenu HMENU) bool {
-	ret, _, _ := syscall.Syscall(setMenu, 2,
+	ret, _, _ := syscall.SyscallN(setMenu,
 		uintptr(hWnd),
-		uintptr(hMenu),
-		0)
-
+		uintptr(hMenu))
 	return ret != 0
 }
 
@@ -825,11 +832,7 @@ func TrackPopupMenuEx(hMenu HMENU, fuFlags uint32, x, y int32, hWnd HWND, lptpm 
 }
 
 func DrawMenuBar(hWnd HWND) bool {
-	ret, _, _ := syscall.Syscall(drawMenuBar, 1,
-		uintptr(hWnd),
-		0,
-		0)
-
+	ret, _, _ := syscall.SyscallN(drawMenuBar, hWnd)
 	return ret != 0
 }
 
@@ -1023,9 +1026,11 @@ func EndPaint(hwnd HWND, paint *PAINTSTRUCT) {
 		uintptr(unsafe.Pointer(paint)))
 }
 
-func GetKeyboardState(lpKeyState *[]byte) bool {
-	ret, _, _ := procGetKeyboardState.Call(
-		uintptr(unsafe.Pointer(&(*lpKeyState)[0])))
+func GetKeyboardState(keyState []byte) bool {
+	if len(keyState) != 256 {
+		panic("keyState slice must have a size of 256 bytes")
+	}
+	ret, _, _ := procGetKeyboardState.Call(uintptr(unsafe.Pointer(&keyState[0])))
 	return ret != 0
 }
 
@@ -1220,11 +1225,8 @@ func CallNextHookEx(hhk HHOOK, nCode int, wParam WPARAM, lParam LPARAM) LRESULT 
 }
 
 func GetKeyState(nVirtKey int32) int16 {
-	ret, _, _ := syscall.Syscall(getKeyState, 1,
-		uintptr(nVirtKey),
-		0,
-		0)
-
+	ret, _, _ := syscall.SyscallN(getKeyState,
+		uintptr(nVirtKey))
 	return int16(ret)
 }
 
@@ -1238,17 +1240,15 @@ func DestroyMenu(hMenu HMENU) bool {
 }
 
 func GetWindowPlacement(hWnd HWND, lpwndpl *WINDOWPLACEMENT) bool {
-	ret, _, _ := syscall.Syscall(getWindowPlacement, 2,
-		uintptr(hWnd),
-		uintptr(unsafe.Pointer(lpwndpl)),
-		0)
-
+	ret, _, _ := syscall.SyscallN(getWindowPlacement,
+		hWnd,
+		uintptr(unsafe.Pointer(lpwndpl)))
 	return ret != 0
 }
 
 func SetWindowPlacement(hWnd HWND, lpwndpl *WINDOWPLACEMENT) bool {
-	ret, _, _ := syscall.Syscall(setWindowPlacement, 2,
-		uintptr(hWnd),
+	ret, _, _ := syscall.SyscallN(setWindowPlacement,
+		hWnd,
 		uintptr(unsafe.Pointer(lpwndpl)),
 		0)
 
@@ -1268,7 +1268,7 @@ func SetScrollInfo(hwnd HWND, fnBar int32, lpsi *SCROLLINFO, fRedraw bool) int32
 }
 
 func GetScrollInfo(hwnd HWND, fnBar int32, lpsi *SCROLLINFO) bool {
-	ret, _, _ := syscall.Syscall(getScrollInfo, 3,
+	ret, _, _ := syscall.SyscallN(getScrollInfo,
 		hwnd,
 		uintptr(fnBar),
 		uintptr(unsafe.Pointer(lpsi)))
